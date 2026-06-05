@@ -1,6 +1,5 @@
 venv/
 .env
-macro_data.json
 history.csv
 alert_state.json
 fetch_log.txt
