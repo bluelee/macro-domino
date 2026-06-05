@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>매크로 도미노 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --accent: #1f6feb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--blue); }
+  #fetched-at { color: var(--muted); font-size: 12px; }
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── 카드 섹션 ── */
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  }
+  .card.blue::before  { background: var(--blue); }
+  .card.purple::before{ background: var(--purple); }
+  .card.yellow::before{ background: var(--yellow); }
+  .card.green::before { background: var(--green); }
+  .card.red::before   { background: var(--red); }
+  .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .card-value { font-size: 26px; font-weight: 700; }
+  .card-unit  { font-size: 13px; color: var(--muted); margin-left: 3px; }
+
+  /* ── 그리드 레이아웃 ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 28px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 28px; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .panel h2 { font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ── 슬라이더 섹션 ── */
+  .sliders-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px; }
+  .slider-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .slider-card label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .4px; }
+  .slider-val { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%; height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    transition: background .2s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb { background: var(--purple); }
+  .slider-range { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  /* ── 스프레드 배너 ── */
+  #spread-banner {
+    border-radius: 10px;
+    padding: 16px 22px;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--border);
+  }
+  #spread-banner .sp-value { font-size: 28px; font-weight: 700; }
+  #spread-banner .sp-desc  { font-size: 13px; color: var(--muted); }
+  #spread-banner .sp-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ── 도미노 흐름 ── */
+  .domino {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: 28px;
+    overflow-x: auto;
+  }
+  .domino-step {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 16px 14px;
+    text-align: center;
+    position: relative;
+    min-width: 150px;
+  }
+  .domino-step:first-child { border-radius: 10px 0 0 10px; }
+  .domino-step:last-child  { border-radius: 0 10px 10px 0; }
+  .domino-step + .domino-step { border-left: none; }
+  .domino-arrow {
+    position: absolute; right: -18px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px; color: var(--blue);
+    z-index: 1;
+  }
+  .d-icon  { font-size: 24px; margin-bottom: 6px; }
+  .d-name  { font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .4px; }
+  .d-val   { font-size: 16px; font-weight: 700; }
+  .d-trend { font-size: 11px; margin-top: 3px; }
+
+  /* ── 신호등 ── */
+  .signals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+  .signal-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+  }
+  .signal-light {
+    width: 44px; height: 44px; border-radius: 50%;
+    margin: 0 auto 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .signal-light.green  { background: #1a3a22; box-shadow: 0 0 16px #3fb95066; }
+  .signal-light.yellow { background: #3a2e10; box-shadow: 0 0 16px #d2992266; }
+  .signal-light.red    { background: #3a1010; box-shadow: 0 0 16px #f8514966; }
+  .signal-title { font-size: 12px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .4px; }
+  .signal-status { font-size: 15px; font-weight: 700; }
+  .signal-reason { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── 차트 ── */
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* ── 추세 차트 섹션 ── */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 28px; }
+  .trend-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .trend-panel h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; letter-spacing: .5px; }
+  .trend-chart-wrap { position: relative; height: 220px; }
+  .trend-empty {
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 13px;
+    gap: 8px;
+  }
+  .trend-empty span { font-size: 28px; }
+  .trend-meta { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  /* ── 반응형 ── */
+  @media (max-width: 1100px) {
+    .cards, .sliders-grid { grid-template-columns: repeat(3, 1fr); }
+    .signals { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .grid-3, .trend-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .cards, .sliders-grid { grid-template-columns: repeat(2, 1fr); }
+    .signals { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 매크로 도미노 대시보드</h1>
+  <span id="fetched-at">로딩 중…</span>
+</header>
+
+<main>
+
+  <!-- 실시간 지표 카드 -->
+  <div class="cards">
+    <div class="card blue">
+      <div class="card-label">미국 10년물 금리</div>
+      <div class="card-value" id="c-10y">—<span class="card-unit">%</span></div>
+    </div>
+    <div class="card purple">
+      <div class="card-label">미국 2년물 금리</div>
+      <div class="card-value" id="c-2y">—<span class="card-unit">%</span></div>
+    </div>
+    <div class="card yellow">
+      <div class="card-label">원/달러 환율</div>
+      <div class="card-value" id="c-usd">—<span class="card-unit">원</span></div>
+    </div>
+    <div class="card green">
+      <div class="card-label">코스피</div>
+      <div class="card-value" id="c-kospi">—<span class="card-unit">pt</span></div>
+    </div>
+    <div class="card red">
+      <div class="card-label">한국 기준금리</div>
+      <div class="card-value" id="c-kr">—<span class="card-unit">%</span></div>
+    </div>
+  </div>
+
+  <!-- 장단기 스프레드 배너 -->
+  <div id="spread-banner">
+    <div>
+      <div class="sp-label">장단기 금리 스프레드 (10Y − 2Y)</div>
+      <div class="sp-value" id="spread-val">—</div>
+    </div>
+    <div>
+      <div class="sp-desc" id="spread-desc">—</div>
+    </div>
+  </div>
+
+  <!-- 슬라이더 -->
+  <div class="sliders-grid">
+    <div class="slider-card">
+      <label>10년물 금리</label>
+      <div class="slider-val" id="sv-10y">4.491%</div>
+      <input type="range" id="sl-10y" min="2" max="8" step="0.01" value="4.491">
+      <div class="slider-range"><span>2%</span><span>8%</span></div>
+    </div>
+    <div class="slider-card">
+      <label>2년물 금리</label>
+      <div class="slider-val" id="sv-2y">3.623%</div>
+      <input type="range" id="sl-2y" min="1" max="7" step="0.01" value="3.623">
+      <div class="slider-range"><span>1%</span><span>7%</span></div>
+    </div>
+    <div class="slider-card">
+      <label>한국 기준금리</label>
+      <div class="slider-val" id="sv-kr">3.5%</div>
+      <input type="range" id="sl-kr" min="0" max="6" step="0.25" value="3.5">
+      <div class="slider-range"><span>0%</span><span>6%</span></div>
+    </div>
+    <div class="slider-card">
+      <label>코스피 변동률</label>
+      <div class="slider-val" id="sv-kchg">0.0%</div>
+      <input type="range" id="sl-kchg" min="-30" max="30" step="0.5" value="0">
+      <div class="slider-range"><span>-30%</span><span>+30%</span></div>
+    </div>
+    <div class="slider-card">
+      <label>레버리지 배율</label>
+      <div class="slider-val" id="sv-lev">1.0x</div>
+      <input type="range" id="sl-lev" min="0.5" max="5" step="0.1" value="1">
+      <div class="slider-range"><span>0.5x</span><span>5x</span></div>
+    </div>
+  </div>
+
+  <!-- 도미노 흐름 -->
+  <div class="domino">
+    <div class="domino-step">
+      <div class="d-icon">📈</div>
+      <div class="d-name">미국 10년물</div>
+      <div class="d-val" id="d-10y">—</div>
+      <div class="d-trend" id="d-10y-t">—</div>
+      <span class="domino-arrow">›</span>
+    </div>
+    <div class="domino-step">
+      <div class="d-icon">📉</div>
+      <div class="d-name">미국 2년물</div>
+      <div class="d-val" id="d-2y">—</div>
+      <div class="d-trend" id="d-2y-t">—</div>
+      <span class="domino-arrow">›</span>
+    </div>
+    <div class="domino-step">
+      <div class="d-icon">💱</div>
+      <div class="d-name">환율 압박</div>
+      <div class="d-val" id="d-fx">—</div>
+      <div class="d-trend" id="d-fx-t">—</div>
+      <span class="domino-arrow">›</span>
+    </div>
+    <div class="domino-step">
+      <div class="d-icon">⚠️</div>
+      <div class="d-name">외인 위험도</div>
+      <div class="d-val" id="d-risk">—</div>
+      <div class="d-trend" id="d-risk-t">—</div>
+      <span class="domino-arrow">›</span>
+    </div>
+    <div class="domino-step">
+      <div class="d-icon">🏦</div>
+      <div class="d-name">코스피 전망</div>
+      <div class="d-val" id="d-kout">—</div>
+      <div class="d-trend" id="d-kout-t">—</div>
+    </div>
+  </div>
+
+  <!-- 차트 2개 -->
+  <div class="grid-2">
+    <div class="panel">
+      <h2>금리별 환율·코스피 예측</h2>
+      <div class="chart-wrap">
+        <canvas id="chart-rate"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>외국인 달러 손익 시뮬레이션</h2>
+      <div class="chart-wrap">
+        <canvas id="chart-pnl"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 30일 추세 차트 -->
+  <div class="section-title">📈 30일 수집 이력 추세</div>
+  <div class="trend-grid">
+    <div class="trend-panel">
+      <h2>금리 추세 (10년물 / 2년물)</h2>
+      <div id="trend-rate-wrap" class="trend-chart-wrap">
+        <div class="trend-empty"><span>📡</span>수집 중...</div>
+      </div>
+      <div class="trend-meta" id="trend-rate-meta"></div>
+    </div>
+    <div class="trend-panel">
+      <h2>환율 추세 (원/달러)</h2>
+      <div id="trend-fx-wrap" class="trend-chart-wrap">
+        <div class="trend-empty"><span>📡</span>수집 중...</div>
+      </div>
+      <div class="trend-meta" id="trend-fx-meta"></div>
+    </div>
+    <div class="trend-panel">
+      <h2>코스피 추세</h2>
+      <div id="trend-kospi-wrap" class="trend-chart-wrap">
+        <div class="trend-empty"><span>📡</span>수집 중...</div>
+      </div>
+      <div class="trend-meta" id="trend-kospi-meta"></div>
+    </div>
+  </div>
+
+  <!-- 투자 신호등 -->
+  <div class="signals">
+    <div class="signal-card">
+      <div class="signal-light" id="sig-bond-light">🔵</div>
+      <div class="signal-title">채권 매수 신호</div>
+      <div class="signal-status" id="sig-bond-status">—</div>
+      <div class="signal-reason" id="sig-bond-reason">—</div>
+    </div>
+    <div class="signal-card">
+      <div class="signal-light" id="sig-fx-light">🔵</div>
+      <div class="signal-title">환율 위험 신호</div>
+      <div class="signal-status" id="sig-fx-status">—</div>
+      <div class="signal-reason" id="sig-fx-reason">—</div>
+    </div>
+    <div class="signal-card">
+      <div class="signal-light" id="sig-kospi-light">🔵</div>
+      <div class="signal-title">코스피 진입 신호</div>
+      <div class="signal-status" id="sig-kospi-status">—</div>
+      <div class="signal-reason" id="sig-kospi-reason">—</div>
+    </div>
+    <div class="signal-card">
+      <div class="signal-light" id="sig-lev-light">🔵</div>
+      <div class="signal-title">레버리지 위험도</div>
+      <div class="signal-status" id="sig-lev-status">—</div>
+      <div class="signal-reason" id="sig-lev-reason">—</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── 상태 ──────────────────────────────────────────────────────────────────
+let DATA = {};
+let rateChart = null;
+let pnlChart  = null;
+
+// ── 유틸 ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt = (v, d=2) => v.toFixed(d);
+
+function colorClass(v, goodAbove=true) {
+  if (goodAbove) return v >= 0 ? 'var(--green)' : 'var(--red)';
+  return v <= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+// ── JSON 로드 ─────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res = await fetch('macro_data.json');
+    DATA = await res.json();
+  } catch(e) {
+    // 파일 로드 실패시 기본값 사용
+    DATA = {
+      fetched_at: '(오프라인 기본값)',
+      us_10y_yield: 4.491,
+      us_2y_yield: 3.623,
+      usd_krw: 1539.58,
+      kospi: 8639.41,
+      kr_base_rate: 3.5,
+      spread_10y_2y: 0.868,
+      rate_diff_us_kr: 0.991
+    };
+  }
+  initFromData();
+}
+
+// ── 데이터로 초기화 ───────────────────────────────────────────────────────
+function initFromData() {
+  $('fetched-at').textContent = '기준: ' + DATA.fetched_at;
+
+  // 카드
+  $('c-10y').innerHTML   = fmt(DATA.us_10y_yield) + '<span class="card-unit">%</span>';
+  $('c-2y').innerHTML    = fmt(DATA.us_2y_yield)  + '<span class="card-unit">%</span>';
+  $('c-usd').innerHTML   = Math.round(DATA.usd_krw) + '<span class="card-unit">원</span>';
+  $('c-kospi').innerHTML = fmt(DATA.kospi, 0)       + '<span class="card-unit">pt</span>';
+  $('c-kr').innerHTML    = fmt(DATA.kr_base_rate)   + '<span class="card-unit">%</span>';
+
+  // 슬라이더 초기값
+  $('sl-10y').value  = DATA.us_10y_yield;
+  $('sl-2y').value   = DATA.us_2y_yield;
+  $('sl-kr').value   = DATA.kr_base_rate;
+  $('sl-kchg').value = 0;
+  $('sl-lev').value  = 1;
+
+  initCharts();
+  recalcAll();
+}
+
+// ── 슬라이더 이벤트 ───────────────────────────────────────────────────────
+['sl-10y','sl-2y','sl-kr','sl-kchg','sl-lev'].forEach(id => {
+  $(id).addEventListener('input', recalcAll);
+});
+
+// ── 전체 재계산 ───────────────────────────────────────────────────────────
+function recalcAll() {
+  const r10  = parseFloat($('sl-10y').value);
+  const r2   = parseFloat($('sl-2y').value);
+  const rKr  = parseFloat($('sl-kr').value);
+  const kChg = parseFloat($('sl-kchg').value);
+  const lev  = parseFloat($('sl-lev').value);
+
+  // 슬라이더 표시값
+  $('sv-10y').textContent  = fmt(r10) + '%';
+  $('sv-2y').textContent   = fmt(r2)  + '%';
+  $('sv-kr').textContent   = fmt(rKr) + '%';
+  $('sv-kchg').textContent = (kChg >= 0 ? '+' : '') + fmt(kChg, 1) + '%';
+  $('sv-lev').textContent  = fmt(lev, 1) + 'x';
+
+  // 파생 계산
+  const spread  = r10 - r2;
+  const rDiff   = r10 - rKr;                          // 미한 금리차
+  const fxPred  = DATA.usd_krw * (1 + rDiff * 0.05);  // 금리차 → 환율 압박 (단순 모델)
+  const kospi   = DATA.kospi * (1 + kChg / 100);
+  const extRisk = Math.max(0, Math.min(100, 50 + rDiff * 10 + (fxPred - 1300) * 0.03));
+  const kospiOut= kospi * (1 - (extRisk - 50) * 0.002);
+
+  // 스프레드 배너
+  updateSpread(spread);
+
+  // 도미노
+  updateDomino(r10, r2, fxPred, extRisk, kospiOut, spread);
+
+  // 신호등
+  updateSignals(r10, r2, rKr, fxPred, kospi, lev, spread);
+
+  // 차트 업데이트
+  updateCharts(r10, r2, rKr, lev, kospi);
+}
+
+// ── 스프레드 ──────────────────────────────────────────────────────────────
+function updateSpread(spread) {
+  const el = $('spread-val');
+  const bn = $('spread-banner');
+  const ds = $('spread-desc');
+  const sign = spread >= 0 ? '+' : '';
+  el.textContent = sign + fmt(spread, 3) + '%p';
+
+  if (spread > 0.5) {
+    el.style.color = 'var(--green)';
+    bn.style.background = '#0d2818';
+    bn.style.borderColor = '#1a4a2a';
+    ds.textContent = '✅ 정상 우상향 — 경기 확장 기대, 채권 매수 유효';
+  } else if (spread > 0) {
+    el.style.color = 'var(--yellow)';
+    bn.style.background = '#2a2010';
+    bn.style.borderColor = '#4a3a10';
+    ds.textContent = '⚠️ 스프레드 축소 — 경기 둔화 우려, 주의 필요';
+  } else {
+    el.style.color = 'var(--red)';
+    bn.style.background = '#2a0d0d';
+    bn.style.borderColor = '#4a1a1a';
+    ds.textContent = '🚨 역전 경고 — 역사적 경기침체 선행지표, 고위험';
+  }
+}
+
+// ── 도미노 흐름 ───────────────────────────────────────────────────────────
+function updateDomino(r10, r2, fxPred, extRisk, kospiOut, spread) {
+  const fxChg = ((fxPred - DATA.usd_krw) / DATA.usd_krw * 100);
+  const riskLvl = extRisk > 70 ? '고위험' : extRisk > 40 ? '중위험' : '저위험';
+  const riskColor = extRisk > 70 ? 'var(--red)' : extRisk > 40 ? 'var(--yellow)' : 'var(--green)';
+
+  setDomino('d-10y', fmt(r10)+'%', r10 > 4 ? '▲ 고금리 압박' : '▼ 완화적', r10 > 4 ? 'var(--red)' : 'var(--green)');
+  setDomino('d-2y',  fmt(r2)+'%',  spread > 0 ? '▲ 정상' : '▼ 역전',       spread > 0 ? 'var(--green)' : 'var(--red)');
+  setDomino('d-fx',  Math.round(fxPred)+'원', (fxChg>=0?'+':'')+fmt(fxChg,1)+'% 압박', fxChg > 2 ? 'var(--red)' : 'var(--green)');
+  setDomino('d-risk', fmt(extRisk,0)+'점', riskLvl, riskColor);
+  setDomino('d-kout', fmt(kospiOut,0)+'pt', kospiOut >= DATA.kospi ? '▲ 상승 전망' : '▼ 하락 전망', kospiOut >= DATA.kospi ? 'var(--green)' : 'var(--red)');
+}
+function setDomino(id, val, trend, color) {
+  $(id).textContent = val;
+  $(id+'-t').textContent = trend;
+  $(id+'-t').style.color = color;
+}
+
+// ── 신호등 ───────────────────────────────────────────────────────────────
+function updateSignals(r10, r2, rKr, fxPred, kospi, lev, spread) {
+  // 1. 채권 매수 신호
+  if (spread > 0.5 && r10 > 4.0) {
+    setSignal('sig-bond', 'green', '🟢 매수 적합', '금리 고점 + 정상 스프레드');
+  } else if (spread < 0) {
+    setSignal('sig-bond', 'red', '🔴 주의', '스프레드 역전 — 침체 선행');
+  } else {
+    setSignal('sig-bond', 'yellow', '🟡 중립', '스프레드 수렴 구간');
+  }
+
+  // 2. 환율 위험 신호
+  if (fxPred > 1600) {
+    setSignal('sig-fx', 'red', '🔴 고위험', '환율 1600원 초과 압박');
+  } else if (fxPred > 1450) {
+    setSignal('sig-fx', 'yellow', '🟡 주의', '환율 고공행진 지속');
+  } else {
+    setSignal('sig-fx', 'green', '🟢 안정', '환율 1450원 이하 안정');
+  }
+
+  // 3. 코스피 진입 신호
+  const kDiff = r10 - rKr;
+  if (kDiff < 0.5 && spread > 0.3) {
+    setSignal('sig-kospi', 'green', '🟢 진입 유리', '금리차 축소 + 스프레드 정상');
+  } else if (kDiff > 1.5 || spread < 0) {
+    setSignal('sig-kospi', 'red', '🔴 진입 불리', '미한 금리차 확대 또는 역전');
+  } else {
+    setSignal('sig-kospi', 'yellow', '🟡 중립', '조건 혼재 — 선택적 접근');
+  }
+
+  // 4. 레버리지 위험도
+  if (lev >= 3) {
+    setSignal('sig-lev', 'red', '🔴 고위험', '레버리지 3배 이상 — 청산 위험');
+  } else if (lev >= 2) {
+    setSignal('sig-lev', 'yellow', '🟡 주의', '레버리지 2배 이상 — 변동성 확대');
+  } else {
+    setSignal('sig-lev', 'green', '🟢 안전', '레버리지 2배 미만');
+  }
+}
+function setSignal(id, cls, status, reason) {
+  const light = $(id+'-light');
+  light.className = 'signal-light ' + cls;
+  light.textContent = cls === 'green' ? '✓' : cls === 'red' ? '✗' : '!';
+  $(id+'-status').textContent = status;
+  $(id+'-status').style.color = cls === 'green' ? 'var(--green)' : cls === 'red' ? 'var(--red)' : 'var(--yellow)';
+  $(id+'-reason').textContent = reason;
+}
+
+// ── 차트 초기화 ───────────────────────────────────────────────────────────
+function initCharts() {
+  const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#8b949e', font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+      y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } }
+    }
+  };
+
+  // 차트 1: 금리별 환율·코스피 예측
+  rateChart = new Chart($('chart-rate'), {
+    type: 'line',
+    data: { labels: [], datasets: [
+      { label: '환율 (원)', data: [], borderColor: '#d29922', backgroundColor: '#d2992222', yAxisID: 'y', tension: 0.4, pointRadius: 3 },
+      { label: '코스피 (pt)', data: [], borderColor: '#3fb950', backgroundColor: '#3fb95022', yAxisID: 'y2', tension: 0.4, pointRadius: 3 }
+    ]},
+    options: { ...chartDefaults,
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+        y:  { position: 'left',  ticks: { color: '#d29922', font: { size: 10 } }, grid: { color: '#21262d' } },
+        y2: { position: 'right', ticks: { color: '#3fb950', font: { size: 10 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+
+  // 차트 2: 외국인 달러 손익
+  pnlChart = new Chart($('chart-pnl'), {
+    type: 'bar',
+    data: { labels: [], datasets: [
+      { label: '달러 손익 (억$)', data: [], backgroundColor: [] }
+    ]},
+    options: { ...chartDefaults }
+  });
+}
+
+// ── 차트 업데이트 ─────────────────────────────────────────────────────────
+function updateCharts(r10, r2, rKr, lev, kospi) {
+  // 차트 1: 10년물 2~7% 구간별 환율·코스피
+  const labels1 = [];
+  const fxArr   = [];
+  const kArr    = [];
+  for (let r = 2.0; r <= 7.0; r += 0.5) {
+    const diff = r - rKr;
+    labels1.push(r.toFixed(1) + '%');
+    fxArr.push(Math.round(DATA.usd_krw * (1 + diff * 0.05)));
+    kArr.push(Math.round(DATA.kospi * (1 - diff * 0.04)));
+  }
+  rateChart.data.labels = labels1;
+  rateChart.data.datasets[0].data = fxArr;
+  rateChart.data.datasets[1].data = kArr;
+  rateChart.update('none');
+
+  // 차트 2: 환율 시나리오별 외국인 달러 손익
+  const labels2 = ['1200원','1350원','1450원','1539원','1600원','1700원','1800원'];
+  const fxScen  = [1200, 1350, 1450, 1539, 1600, 1700, 1800];
+  const kospiBase = DATA.kospi;
+  const pnl = fxScen.map(fx => {
+    const fxGain = (DATA.usd_krw - fx) / fx;     // 환차손익 (달러로 환산)
+    const kGain  = (kospi - kospiBase) / kospiBase;
+    return parseFloat(((fxGain + kGain) * lev * 1000).toFixed(1));
+  });
+  const colors = pnl.map(v => v >= 0 ? '#3fb95099' : '#f8514999');
+
+  pnlChart.data.labels = labels2;
+  pnlChart.data.datasets[0].data = pnl;
+  pnlChart.data.datasets[0].backgroundColor = colors;
+  pnlChart.update('none');
+}
+
+// ── CSV 파싱 ─────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',').map(v => v.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = vals[i]);
+    return obj;
+  });
+}
+
+// ── 추세 차트 빌더 ──────────────────────────────────────────────────────
+function makeTrendChart(canvasId, datasets, yOpts = {}) {
+  const base = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: { labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 14 } },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', font: { size: 9 }, maxRotation: 45, maxTicksLimit: 10 },
+        grid: { color: '#21262d' }
+      },
+      y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' }, ...yOpts }
+    }
+  };
+  return new Chart($(canvasId), { type: 'line', data: { labels: [], datasets }, options: base });
+}
+
+// ── 추세 차트 렌더링 ────────────────────────────────────────────────────
+function renderTrendCharts(rows) {
+  // 최근 30일치만 (15분마다 수집 → 하루 96건, 최대 30일 = 2880건)
+  // 날짜 단위로 마지막 값만 남겨 최대 30개 포인트로 축약
+  const byDate = {};
+  rows.forEach(r => {
+    const day = r.date ? r.date.slice(0, 10) : null;
+    if (day) byDate[day] = r;
+  });
+  const days = Object.keys(byDate).sort().slice(-30);
+
+  if (days.length === 0) return; // 데이터 없으면 "수집 중..." 유지
+
+  const labels  = days.map(d => d.slice(5));  // MM-DD
+  const us10y   = days.map(d => parseFloat(byDate[d].us10y));
+  const us2y    = days.map(d => parseFloat(byDate[d].us2y));
+  const krw     = days.map(d => parseFloat(byDate[d].krw));
+  const kospi   = days.map(d => parseFloat(byDate[d].kospi));
+
+  const trendLine = (color) => ({
+    borderColor: color, backgroundColor: color + '18',
+    fill: true, tension: 0.35, pointRadius: 2, pointHoverRadius: 5,
+    borderWidth: 2
+  });
+
+  // ── 차트 1: 금리 ──
+  const rateWrap = $('trend-rate-wrap');
+  rateWrap.innerHTML = '<canvas id="tc-rate"></canvas>';
+  const rateC = makeTrendChart('tc-rate', [
+    { label: '10년물 (%)', data: us10y, ...trendLine('#58a6ff') },
+    { label: '2년물 (%)',  data: us2y,  ...trendLine('#bc8cff') }
+  ], { title: { display: false } });
+  rateC.data.labels = labels;
+  rateC.update('none');
+  $('trend-rate-meta').textContent = `${days[0]} ~ ${days[days.length-1]} · ${days.length}일`;
+
+  // ── 차트 2: 환율 ──
+  const fxWrap = $('trend-fx-wrap');
+  fxWrap.innerHTML = '<canvas id="tc-fx"></canvas>';
+  const fxC = makeTrendChart('tc-fx', [
+    { label: '원/달러', data: krw, ...trendLine('#d29922') }
+  ]);
+  fxC.data.labels = labels;
+  fxC.update('none');
+  $('trend-fx-meta').textContent = `최고 ${Math.max(...krw).toLocaleString()}원 / 최저 ${Math.min(...krw).toLocaleString()}원`;
+
+  // ── 차트 3: 코스피 ──
+  const kospiWrap = $('trend-kospi-wrap');
+  kospiWrap.innerHTML = '<canvas id="tc-kospi"></canvas>';
+  const kospiC = makeTrendChart('tc-kospi', [
+    { label: '코스피 (pt)', data: kospi, ...trendLine('#3fb950') }
+  ]);
+  kospiC.data.labels = labels;
+  kospiC.update('none');
+  $('trend-kospi-meta').textContent = `최고 ${Math.max(...kospi).toLocaleString(undefined,{maximumFractionDigits:0})}pt / 최저 ${Math.min(...kospi).toLocaleString(undefined,{maximumFractionDigits:0})}pt`;
+}
+
+// ── CSV 로드 ─────────────────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const res = await fetch('history.csv');
+    if (!res.ok) throw new Error('파일 없음');
+    const text = await res.text();
+    const rows = parseCSV(text);
+    if (rows.length > 0) {
+      renderTrendCharts(rows);
+    }
+  } catch(e) {
+    // 파일 없음 → "수집 중..." 메시지 유지
+  }
+}
+
+// ── 시작 ──────────────────────────────────────────────────────────────────
+loadData();
+loadHistory();
+</script>
+</body>
+</html>
