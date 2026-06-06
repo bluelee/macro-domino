@@ -1,6 +1,5 @@
 venv/
 .env
-history.csv
 alert_state.json
 fetch_log.txt
 __pycache__/
