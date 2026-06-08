@@ -225,7 +225,27 @@
 
 <header>
   <h1>📊 매크로 도미노 대시보드</h1>
-  <span id="fetched-at">로딩 중…</span>
+  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+    <span id="fetched-at">로딩 중…</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span id="auto-refresh-label" style="font-size:12px; color:var(--muted);">자동갱신</span>
+      <select id="refresh-interval" style="
+        background:var(--surface); border:1px solid var(--border);
+        color:var(--text); font-size:12px; padding:3px 8px;
+        border-radius:6px; cursor:pointer; outline:none;">
+        <option value="0">끄기</option>
+        <option value="5" selected>5분</option>
+        <option value="10">10분</option>
+        <option value="30">30분</option>
+        <option value="60">1시간</option>
+      </select>
+      <span id="next-refresh" style="font-size:11px; color:var(--muted); min-width:60px;"></span>
+      <button id="refresh-now" onclick="refreshNow()" style="
+        background:var(--accent); border:none; color:#fff;
+        font-size:12px; padding:4px 10px; border-radius:6px;
+        cursor:pointer; white-space:nowrap;">🔄 지금 갱신</button>
+    </div>
+  </div>
 </header>
 
 <main>
@@ -778,9 +798,65 @@ async function loadHistory() {
   }
 }
 
+// ── 자동 갱신 ─────────────────────────────────────────────────────────────
+let refreshTimer = null;
+let countdownTimer = null;
+let nextRefreshAt = null;
+
+function startAutoRefresh() {
+  clearInterval(refreshTimer);
+  clearInterval(countdownTimer);
+  $('next-refresh').textContent = '';
+
+  const minutes = parseInt($('refresh-interval').value);
+  if (minutes === 0) return;
+
+  nextRefreshAt = Date.now() + minutes * 60 * 1000;
+
+  // 카운트다운 표시 (매 초)
+  countdownTimer = setInterval(() => {
+    const remaining = Math.max(0, nextRefreshAt - Date.now());
+    const m = Math.floor(remaining / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    $('next-refresh').textContent = `(${m}:${s.toString().padStart(2,'0')} 후)`;
+  }, 1000);
+
+  // 실제 갱신
+  refreshTimer = setInterval(() => {
+    nextRefreshAt = Date.now() + minutes * 60 * 1000;
+    refreshNow();
+  }, minutes * 60 * 1000);
+}
+
+async function refreshNow() {
+  const btn = $('refresh-now');
+  btn.textContent = '⏳ 갱신 중…';
+  btn.disabled = true;
+  try {
+    // 캐시 무력화용 타임스탬프
+    const ts = '?t=' + Date.now();
+    const [jsonRes, csvRes] = await Promise.all([
+      fetch('macro_data.json' + ts),
+      fetch('history.csv' + ts)
+    ]);
+    DATA = await jsonRes.json();
+    initFromData();
+    const csvText = await csvRes.text();
+    const rows = parseCSV(csvText);
+    if (rows.length > 0) renderTrendCharts(rows);
+  } catch(e) {
+    console.warn('갱신 실패:', e);
+  }
+  btn.textContent = '🔄 지금 갱신';
+  btn.disabled = false;
+}
+
+$('refresh-interval').addEventListener('change', startAutoRefresh);
+
 // ── 시작 ──────────────────────────────────────────────────────────────────
 loadData();
 loadHistory();
+startAutoRefresh();
 </script>
 </body>
 </html>
