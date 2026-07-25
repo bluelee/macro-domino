@@ -1,10 +1,10 @@
 {
-  "fetched_at": "2026-07-25 14:28:22",
-  "us_10y_yield": 4.679,
-  "us_2y_yield": 3.805,
+  "fetched_at": "2026-07-25 16:01:41",
+  "us_10y_yield": 4.703,
+  "us_2y_yield": 3.8,
   "usd_krw": 1462.1,
-  "kospi": 6690.6201,
+  "kospi": 7096.8901,
   "kr_base_rate": 3.5,
-  "spread_10y_2y": 0.874,
-  "rate_diff_us_kr": 1.179
+  "spread_10y_2y": 0.903,
+  "rate_diff_us_kr": 1.203
 }
